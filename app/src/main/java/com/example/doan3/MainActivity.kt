@@ -96,6 +96,7 @@ fun ShopApp() {
     if (selectedProduct != null) {
         ProductDetailScreen(
             product = selectedProduct!!,
+            currentUsername = currentUsername,
             onBack = { selectedProduct = null },
             onAddToCart = { product, size -> addToCart(product, size); selectedProduct = null }
         )
@@ -145,7 +146,12 @@ fun ShopApp() {
                 onToggleFavorite = { toggleFavorite(it) },
                 onProductClick = { selectedProduct = it }
             )
-            2 -> PlaceholderScreen("Đơn hàng", Icons.Outlined.List, Modifier.padding(innerPadding))
+            2 -> ExploreScreen(
+                modifier = Modifier.padding(innerPadding),
+                onProductClick = { selectedProduct = it },
+                favorites = favorites,
+                onToggleFavorite = { toggleFavorite(it) }
+            )
             3 -> AccountTabScreen(
                 modifier = Modifier.padding(innerPadding),
                 isLoggedIn = isLoggedIn,
@@ -312,18 +318,26 @@ fun ProductCard(
                 }
                 // Category badge
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.55f))
+                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.55f))
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(product.category, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Medium)
                 }
-                // Placeholder icon
-                Icon(Icons.Outlined.Person, null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(72.dp))
                 // Heart button
+                Box(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(32.dp)
+                        .shadow(4.dp, CircleShape).background(Color.White, CircleShape)
+                        .clickable { onFavoriteClick() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = null,
+                        tint = if (isFavorite) AccentRed else Color.Gray,
+                        modifier = Modifier.size(17.dp)
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -357,7 +371,7 @@ fun BottomNavBar(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     val items = listOf(
         NavItem("Trang chủ", Icons.Outlined.Home, Icons.Filled.Home),
         NavItem("Yêu thích", Icons.Outlined.FavoriteBorder, Icons.Filled.Favorite),
-        NavItem("Đơn hàng", Icons.Outlined.List, Icons.Filled.List),
+        NavItem("Khám phá", Icons.Outlined.GridView, Icons.Filled.GridView),
         NavItem("Tài khoản", Icons.Outlined.Person, Icons.Filled.Person),
     )
     NavigationBar(containerColor = Color.White, tonalElevation = 0.dp,
@@ -385,6 +399,188 @@ fun PlaceholderScreen(title: String, icon: ImageVector, modifier: Modifier = Mod
             Icon(icon, null, modifier = Modifier.size(64.dp), tint = Color(0xFFDDDDDD))
             Spacer(modifier = Modifier.height(12.dp))
             Text(title, color = Color.LightGray, fontSize = 16.sp)
+        }
+    }
+}
+
+@Composable
+fun ExploreScreen(
+    modifier: Modifier = Modifier,
+    onProductClick: (Product) -> Unit = {},
+    favorites: Set<Int> = emptySet(),
+    onToggleFavorite: (Product) -> Unit = {}
+) {
+    val trendTips = listOf(
+        Pair("🖤 Minimalist", "Tối giản là đỉnh cao. Chọn tông trung tính, cắt may gọn gàng — ít mà chất."),
+        Pair("🌿 Earthy Tones", "Màu đất, be, nâu caramel đang thống trị. Kết hợp với denim là chuẩn không cần chỉnh."),
+        Pair("👗 Oversized", "Áo rộng, quần ống suông — thoải mái mà vẫn trendy. Layer thêm áo khoác là xong."),
+        Pair("✨ Monochrome", "Mặc cùng một tông màu từ đầu đến chân. Đơn giản nhưng cực kỳ ấn tượng."),
+        Pair("👟 Smart Casual", "Kết hợp blazer với sneaker trắng — công sở hay đi chơi đều ổn."),
+    )
+
+    val styleGuides = listOf(
+        Triple("🏢 Công sở", "Áo sơ mi + quần tây + giày da. Thêm blazer nếu muốn nâng tầm.", Color(0xFFE8EAF6)),
+        Triple("☕ Đi cafe", "Áo thun basic + quần jean + sneaker. Thêm túi tote là hoàn hảo.", Color(0xFFFFF8E1)),
+        Triple("🌙 Dạo phố", "Áo crop + chân váy midi + sandal. Nhẹ nhàng mà vẫn nổi bật.", Color(0xFFFCE4EC)),
+        Triple("🏃 Năng động", "Áo hoodie + jogger + giày thể thao. Thoải mái cho mọi hoạt động.", Color(0xFFE8F5E9)),
+    )
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 20.dp)
+    ) {
+        // ── Hero banner ───────────────────────────────────────────────────────
+        item {
+            Box(
+                modifier = Modifier.fillMaxWidth().height(220.dp)
+                    .background(
+                        Brush.verticalGradient(listOf(Color(0xFF1A1A1A), Color(0xFF3D3D3D)))
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("✦ FASHION WORLD ✦", fontSize = 11.sp, color = Color.White.copy(0.6f),
+                        letterSpacing = 4.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Phong cách\nLà ngôn ngữ\nKhông lời", fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold, color = Color.White,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = 36.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Box(modifier = Modifier.clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(0.15f))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        Text("Khám phá xu hướng 2025", fontSize = 12.sp, color = Color.White)
+                    }
+                }
+            }
+        }
+
+        // ── Giới thiệu shop ───────────────────────────────────────────────────
+        item {
+            Column(modifier = Modifier.background(Color.White).padding(20.dp)) {
+                Text("VỀ SHOP CHÚNG TÔI", fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp, color = PrimaryBlack, letterSpacing = 1.sp)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Chúng tôi mang đến những bộ trang phục được chọn lọc kỹ càng — " +
+                    "từ phong cách tối giản hiện đại đến những thiết kế nữ tính thanh lịch. " +
+                    "Mỗi sản phẩm là sự kết hợp giữa chất liệu cao cấp và thiết kế tinh tế, " +
+                    "giúp bạn tự tin thể hiện cá tính riêng trong mọi hoàn cảnh.",
+                    fontSize = 14.sp, color = Color(0xFF555555), lineHeight = 22.sp
+                )
+                Spacer(Modifier.height(16.dp))
+                // Stats row
+                Row(horizontalArrangement = Arrangement.SpaceEvenly, modifier = Modifier.fillMaxWidth()) {
+                    ShopStat("500+", "Sản phẩm")
+                    ShopStat("2K+", "Khách hàng")
+                    ShopStat("4.9★", "Đánh giá")
+                    ShopStat("3 năm", "Kinh nghiệm")
+                }
+            }
+        }
+
+        // ── Xu hướng 2025 ─────────────────────────────────────────────────────
+        item {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🔥", fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("XU HƯỚNG 2025", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp, color = PrimaryBlack, letterSpacing = 1.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                trendTips.forEach { (title, desc) ->
+                    Card(shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(2.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        Row(modifier = Modifier.padding(14.dp)) {
+                            Text(title.take(2), fontSize = 24.sp)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(title.drop(3), fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp, color = PrimaryBlack)
+                                Spacer(Modifier.height(4.dp))
+                                Text(desc, fontSize = 13.sp, color = Color(0xFF666666), lineHeight = 20.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Style guide ───────────────────────────────────────────────────────
+        item {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("👗", fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("GỢI Ý PHỐI ĐỒ", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp, color = PrimaryBlack, letterSpacing = 1.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    styleGuides.take(2).forEach { (title, desc, bg) ->
+                        StyleCard(title, desc, bg, Modifier.weight(1f))
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    styleGuides.drop(2).forEach { (title, desc, bg) ->
+                        StyleCard(title, desc, bg, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        // ── Tips chăm sóc quần áo ─────────────────────────────────────────────
+        item {
+            Card(shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("💡 TIPS BẢO QUẢN", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp, color = Color.White)
+                    Spacer(Modifier.height(12.dp))
+                    listOf(
+                        "Giặt quần áo ở nhiệt độ thấp để giữ màu sắc",
+                        "Phơi trong bóng râm, tránh ánh nắng trực tiếp",
+                        "Gấp áo len thay vì treo để tránh giãn",
+                        "Dùng túi lưới khi giặt máy cho đồ mỏng",
+                    ).forEach { tip ->
+                        Row(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text("•", color = Color.White.copy(0.6f), fontSize = 14.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(tip, color = Color.White.copy(0.85f), fontSize = 13.sp, lineHeight = 20.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ShopStat(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = PrimaryBlack)
+        Text(label, fontSize = 11.sp, color = Color.Gray)
+    }
+}
+
+@Composable
+fun StyleCard(title: String, desc: String, bg: Color, modifier: Modifier = Modifier) {
+    Card(shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = bg),
+        elevation = CardDefaults.cardElevation(0.dp),
+        modifier = modifier) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(title.take(2), fontSize = 22.sp)
+            Spacer(Modifier.height(6.dp))
+            Text(title.drop(3), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = PrimaryBlack)
+            Spacer(Modifier.height(4.dp))
+            Text(desc, fontSize = 11.sp, color = Color(0xFF666666), lineHeight = 17.sp)
         }
     }
 }

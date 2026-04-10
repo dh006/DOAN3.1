@@ -411,7 +411,7 @@ fun ProductFormDialog(existing: Product?, onDismiss: () -> Unit, onSave: (Produc
 fun AdminOrdersScreen(onBack: () -> Unit) {
     var filterStatus by remember { mutableStateOf("Tất cả") }
     var detailOrder by remember { mutableStateOf<Order?>(null) }
-    val statusOptions = listOf("Tất cả", "Chờ xác nhận", "Đang giao", "Hoàn thành", "Đã hủy")
+    val statusOptions = listOf("Tất cả", "Chờ xác nhận", "Đã xác nhận", "Đang giao", "Đã nhận hàng", "Trả hàng", "Hoàn thành", "Đã hủy")
     val filtered = if (filterStatus == "Tất cả") orderList else orderList.filter { it.status == filterStatus }
 
     if (detailOrder != null) {
@@ -453,8 +453,11 @@ fun AdminOrdersScreen(onBack: () -> Unit) {
 fun AdminOrderRow(order: Order, onClick: () -> Unit) {
     val (statusColor, statusBg) = when (order.status) {
         "Chờ xác nhận" -> Color(0xFFF59E0B) to Color(0xFFFFF8E1)
-        "Đang giao"    -> AdminBlue to Color(0xFFE3F2FD)
-        "Hoàn thành"   -> AdminGreen to Color(0xFFE8F5E9)
+        "Đã xác nhận"  -> Color(0xFF1565C0) to Color(0xFFE3F2FD)
+        "Đang giao"    -> Color(0xFF6A1B9A) to Color(0xFFF3E5F5)
+        "Đã nhận hàng" -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
+        "Trả hàng"     -> Color(0xFFE65100) to Color(0xFFFFF3E0)
+        "Hoàn thành"   -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
         "Đã hủy"       -> AccentRed to Color(0xFFFFEBEE)
         else           -> Color.Gray to Color(0xFFF5F5F5)
     }
@@ -483,7 +486,7 @@ fun AdminOrderRow(order: Order, onClick: () -> Unit) {
 
 @Composable
 fun OrderDetailDialog(order: Order, onDismiss: () -> Unit) {
-    val statusOptions = listOf("Chờ xác nhận", "Đang giao", "Hoàn thành", "Đã hủy")
+    val statusOptions = listOf("Chờ xác nhận", "Đã xác nhận", "Đang giao", "Đã nhận hàng", "Trả hàng", "Hoàn thành", "Đã hủy")
     var currentStatus by remember { mutableStateOf(order.status) }
 
     AlertDialog(
@@ -519,8 +522,23 @@ fun OrderDetailDialog(order: Order, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = AdminPurple),
-                shape = RoundedCornerShape(10.dp)) { Text("Đóng") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Admin có thể hủy đơn
+                if (order.status != "Đã hủy" && order.status != "Hoàn thành") {
+                    OutlinedButton(
+                        onClick = {
+                            val idx = orderList.indexOfFirst { it.id == order.id }
+                            if (idx >= 0) orderList[idx] = orderList[idx].copy(status = "Đã hủy")
+                            com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, "Đã hủy")
+                            onDismiss()
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
+                        shape = RoundedCornerShape(10.dp)
+                    ) { Text("Hủy đơn", color = AccentRed) }
+                }
+                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = AdminPurple),
+                    shape = RoundedCornerShape(10.dp)) { Text("Đóng") }
+            }
         }
     )
 }

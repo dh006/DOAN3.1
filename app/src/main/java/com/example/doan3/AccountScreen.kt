@@ -537,19 +537,25 @@ fun RegisterScreen(onBack: () -> Unit, onGoLogin: () -> Unit = {}) {
                     errorMsg = when {
                         fullName.isBlank() || username.isBlank() || email.isBlank() || phone.isBlank() || password.isBlank() ->
                             "Vui lòng điền đầy đủ thông tin"
+                        !email.contains("@") || !email.contains(".") ->
+                            "Email không hợp lệ"
+                        username.trim().length < 3 ->
+                            "Tên đăng nhập phải ít nhất 3 ký tự"
+                        password.length < 6 ->
+                            "Mật khẩu phải ít nhất 6 ký tự"
                         password != confirmPassword -> "Mật khẩu nhập lại không khớp"
                         else -> {
                             isLoading = true
                             scope.launch {
-                                val ok = com.example.doan3.firebase.FirebaseManager.register(
+                                val error = com.example.doan3.firebase.FirebaseManager.register(
                                     username = username.trim(),
                                     email = email.trim(),
                                     phone = phone.trim(),
                                     password = password
                                 )
                                 isLoading = false
-                                if (ok) showSuccess = true
-                                else errorMsg = "Lỗi kết nối — kiểm tra mạng và Firestore Rules"
+                                if (error == null) showSuccess = true
+                                else errorMsg = error
                             }
                             ""
                         }

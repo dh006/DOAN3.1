@@ -7,12 +7,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.*
@@ -26,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +37,7 @@ data class ProductColor(val name: String, val color: Color)
 @Composable
 fun ProductDetailScreen(
     product: Product,
+    currentUsername: String = "",
     onBack: () -> Unit,
     onAddToCart: (Product, String) -> Unit = { _, _ -> }
 ) {
@@ -218,15 +219,22 @@ fun ProductDetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(product.price, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = PrimaryBlack)
                     Spacer(modifier = Modifier.weight(1f))
-                    // Rating
+                    // Rating thật từ reviews
+                    val productReviews = reviewList.filter { it.productFirestoreId == product.firestoreId }
+                    val avgStars = if (productReviews.isEmpty()) 0f
+                    else productReviews.sumOf { it.stars }.toFloat() / productReviews.size
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         repeat(5) { i ->
                             Icon(Icons.Filled.Star, null,
-                                tint = if (i < 4) Color(0xFFFFC107) else Color(0xFFDDDDDD),
+                                tint = if (i < avgStars.toInt()) Color(0xFFFFC107) else Color(0xFFDDDDDD),
                                 modifier = Modifier.size(16.dp))
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("4.0", fontSize = 12.sp, color = Color.Gray)
+                        Text(
+                            if (productReviews.isEmpty()) "Chưa có đánh giá"
+                            else "${"%.1f".format(avgStars)} (${productReviews.size})",
+                            fontSize = 12.sp, color = Color.Gray
+                        )
                     }
                 }
 
@@ -300,7 +308,229 @@ fun ProductDetailScreen(
                     "Phù hợp cho cả đi làm, đi chơi và các hoạt động hàng ngày.",
                     fontSize = 14.sp, color = Color(0xFF666666), lineHeight = 22.sp
                 )
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = Color(0xFFF0F0F0))
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // ── Reviews section ───────────────────────────────────────────
+                ReviewSection(
+                    product = product,
+                    currentUsername = currentUsername
+                )
+
                 Spacer(modifier = Modifier.height(28.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun ReviewSection(product: Product, currentUsername: String) {
+    val productReviews = reviewList.filter { it.productFirestoreId == product.firestoreId }
+    val avgStars = if (productReviews.isEmpty()) 0f
+    else productReviews.sumOf { it.stars }.toFloat() / productReviews.size
+
+    // Tỉ lệ từng sao
+    val starCounts = (5 downTo 1).map { star ->
+        star to productReviews.count { it.stars == star }
+    }
+
+    var showWriteReview by remember { mutableStateOf(false) }
+    var newStars by remember { mutableIntStateOf(5) }
+    var newComment by remember { mutableStateOf("") }
+    val alreadyReviewed = productReviews.any { it.username == currentUsername }
+
+    Column {
+        // ── Header ────────────────────────────────────────────────────────────
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Đánh giá & Bình luận", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            if (productReviews.isNotEmpty()) {
+                Box(modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFFFFF8E1)).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                    Text("${productReviews.size} đánh giá", fontSize = 11.sp, color = Color(0xFFF59E0B))
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (productReviews.isNotEmpty()) {
+            // ── Tổng quan rating ──────────────────────────────────────────────
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // Điểm trung bình lớn
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.width(80.dp)) {
+                    Text("${"%.1f".format(avgStars)}", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 40.sp, color = PrimaryBlack)
+                    Row {
+                        repeat(5) { i ->
+                            Icon(Icons.Filled.Star, null,
+                                tint = if (i < avgStars) Color(0xFFFFC107) else Color(0xFFDDDDDD),
+                                modifier = Modifier.size(14.dp))
+                        }
+                    }
+                    Text("${productReviews.size} đánh giá", fontSize = 10.sp, color = Color.Gray)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                // Thanh tỉ lệ từng sao
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    starCounts.forEach { (star, count) ->
+                        val ratio = if (productReviews.isEmpty()) 0f else count.toFloat() / productReviews.size
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$star", fontSize = 11.sp, color = Color.Gray, modifier = Modifier.width(12.dp))
+                            Icon(Icons.Filled.Star, null, tint = Color(0xFFFFC107), modifier = Modifier.size(11.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFFEEEEEE))) {
+                                Box(modifier = Modifier.fillMaxHeight()
+                                    .fillMaxWidth(ratio).background(Color(0xFFFFC107), RoundedCornerShape(3.dp)))
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("$count", fontSize = 10.sp, color = Color.Gray, modifier = Modifier.width(16.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color(0xFFF0F0F0))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // ── Form viết đánh giá ────────────────────────────────────────────────
+        if (currentUsername.isBlank()) {
+            Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(SurfaceGray).padding(16.dp), contentAlignment = Alignment.Center) {
+                Text("Đăng nhập để đánh giá sản phẩm", fontSize = 13.sp, color = Color.Gray)
+            }
+        } else if (alreadyReviewed) {
+            Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFE8F5E9)).padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.CheckCircle, null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Bạn đã đánh giá sản phẩm này", fontSize = 13.sp, color = Color(0xFF2E7D32))
+                }
+            }
+        } else {
+            // Nút mở form
+            if (!showWriteReview) {
+                OutlinedButton(
+                    onClick = { showWriteReview = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryBlack)
+                ) {
+                    Icon(Icons.Filled.Star, null, tint = Color(0xFFFFC107), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Viết đánh giá", fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                // Form đánh giá
+                Card(shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceGray),
+                    elevation = CardDefaults.cardElevation(0.dp),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Đánh giá của bạn", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        // Star picker
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            repeat(5) { i ->
+                                Icon(Icons.Filled.Star, null,
+                                    tint = if (i < newStars) Color(0xFFFFC107) else Color(0xFFDDDDDD),
+                                    modifier = Modifier.size(36.dp).clickable { newStars = i + 1 })
+                            }
+                        }
+                        Text(when (newStars) {
+                            1 -> "😞 Rất tệ"; 2 -> "😕 Tệ"; 3 -> "😐 Bình thường"
+                            4 -> "😊 Tốt"; else -> "🤩 Xuất sắc!"
+                        }, fontSize = 13.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value = newComment, onValueChange = { newComment = it },
+                            placeholder = { Text("Chia sẻ cảm nhận của bạn về sản phẩm...", color = Color.LightGray) },
+                            modifier = Modifier.fillMaxWidth().height(100.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryBlack, unfocusedBorderColor = Color.LightGray,
+                                focusedContainerColor = Color.White, unfocusedContainerColor = Color.White)
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { showWriteReview = false; newComment = ""; newStars = 5 },
+                                modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp)) {
+                                Text("Hủy")
+                            }
+                            Button(
+                                onClick = {
+                                    com.example.doan3.firebase.FirebaseManager.saveReview(
+                                        Review(id = nextReviewId(),
+                                            productFirestoreId = product.firestoreId,
+                                            username = currentUsername,
+                                            stars = newStars, comment = newComment.trim())
+                                    )
+                                    showWriteReview = false; newComment = ""; newStars = 5
+                                },
+                                modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlack)
+                            ) { Text("Gửi đánh giá", fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Danh sách bình luận ───────────────────────────────────────────────
+        if (productReviews.isNotEmpty()) {
+            productReviews.reversed().forEach { review ->
+                val reviewer = userAccounts.find { it.username == review.username }
+                Card(shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(1.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Avatar
+                            Box(modifier = Modifier.size(36.dp).clip(CircleShape)
+                                .background(PrimaryBlack), contentAlignment = Alignment.Center) {
+                                if (!reviewer?.avatarUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(reviewer!!.avatarUrl).crossfade(true).build(),
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize().clip(CircleShape)
+                                    )
+                                } else {
+                                    Text(review.username.take(1).uppercase(), color = Color.White,
+                                        fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(review.username, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Row {
+                                    repeat(5) { i ->
+                                        Icon(Icons.Filled.Star, null,
+                                            tint = if (i < review.stars) Color(0xFFFFC107) else Color(0xFFDDDDDD),
+                                            modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            }
+                            // Highlight nếu là review của mình
+                            if (review.username == currentUsername) {
+                                Box(modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFF0F0F0)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                    Text("Của bạn", fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                        if (review.comment.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(review.comment, fontSize = 13.sp, color = Color(0xFF444444), lineHeight = 20.sp)
+                        }
+                    }
+                }
             }
         }
     }

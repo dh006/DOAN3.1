@@ -8,6 +8,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -202,12 +206,21 @@ fun CartItemRow(item: CartItem, onIncrease: () -> Unit, onDecrease: () -> Unit) 
             // Image placeholder with gradient
             Box(
                 modifier = Modifier.size(80.dp).clip(RoundedCornerShape(12.dp))
-                    .background(Brush.verticalGradient(
-                        listOf(item.product.color.copy(alpha = 0.9f), item.product.color.copy(alpha = 0.5f))
-                    )),
+                    .background(item.product.color.copy(alpha = 0.6f)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(item.product.name.take(2), color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                if (item.product.imageUrl.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(item.product.imageUrl).crossfade(true).build(),
+                        contentDescription = item.product.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    Text(item.product.name.take(2), color = Color.White,
+                        fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+                }
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

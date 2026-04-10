@@ -4,9 +4,11 @@ import androidx.compose.ui.graphics.Color
 import com.example.doan3.CartItem
 import com.example.doan3.Order
 import com.example.doan3.Product
+import com.example.doan3.Review
 import com.example.doan3.UserAccount
 import com.example.doan3.orderList
 import com.example.doan3.productList
+import com.example.doan3.reviewList
 import com.example.doan3.userAccounts
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -25,6 +27,7 @@ object FirebaseManager {
         listenProducts()
         listenUsers()
         listenOrders()
+        listenReviews()
     }
 
     // ---------------- PRODUCTS ----------------
@@ -171,15 +174,27 @@ object FirebaseManager {
         }
     }
 
+    // Trả về null = thành công, String = thông báo lỗi cụ thể
     suspend fun register(
         username: String,
         email: String,
         phone: String,
         password: String
-    ): Boolean {
+    ): String? {
         return try {
-            withTimeout(10_000) {  // timeout 10 giây
+            withTimeout(10_000) {
                 android.util.Log.d("FirebaseManager", "Bắt đầu đăng ký: $username")
+
+                // Kiểm tra username trùng
+                val usernameSnap = db.collection("users")
+                    .whereEqualTo("username", username).limit(1).get().await()
+                if (!usernameSnap.isEmpty) return@withTimeout "Tên đăng nhập đã được sử dụng"
+
+                // Kiểm tra email trùng
+                val emailSnap = db.collection("users")
+                    .whereEqualTo("email", email).limit(1).get().await()
+                if (!emailSnap.isEmpty) return@withTimeout "Email này đã được đăng ký"
+
                 val model = mapOf(
                     "username"  to username,
                     "email"     to email,
@@ -193,14 +208,14 @@ object FirebaseManager {
                 val ref = db.collection("users").add(model).await()
                 db.collection("users").document(ref.id).update("id", ref.id).await()
                 android.util.Log.d("FirebaseManager", "Đăng ký thành công: ${ref.id}")
-                true
+                null // thành công
             }
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             android.util.Log.e("FirebaseManager", "Timeout đăng ký — kiểm tra Firestore Rules!")
-            false
+            "Hết thời gian kết nối — kiểm tra mạng và Firestore Rules"
         } catch (e: Exception) {
             android.util.Log.e("FirebaseManager", "Lỗi đăng ký: ${e.message}", e)
-            false
+            "Lỗi kết nối: ${e.message}"
         }
     }
 
@@ -346,11 +361,48 @@ object FirebaseManager {
         } catch (e: Exception) { false }
     }
 
-    fun updateOrderStatus(order: Order, status: String, onDone: () -> Unit = {}) = scope.launch {
-        val fsId = order.firestoreId
+    fun saveReview(review: Review) = scope.launch {
+        try {
+            val model = mapOf(
+                "productFirestoreId" to review.productFirestoreId,
+                "username"  to review.username,
+                "stars"     to review.stars,
+                "comment"   to review.comment,
+                "createdAt" to review.createdAt.toDouble()
+            )
+            val ref = db.collection("reviews").add(model).await()
+            db.collection("reviews").document(ref.id).update("id", ref.id).await()
+            // Cập nhật local
+            reviewList.add(review.copy(id = ref.id.hashCode()))
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseManager", "saveReview error: ${e.message}")
+        }
+    }
+
+    fun listenReviews() {
+        db.collection("reviews").addSnapshotListener { snap, _ ->
+            snap ?: return@addSnapshotListener
+            val list = snap.documents.mapNotNull { doc ->
+                try {
+                    Review(
+                        id = doc.id.hashCode(),
+                        productFirestoreId = doc.getString("productFirestoreId") ?: "",
+                        username  = doc.getString("username") ?: "",
+                        stars     = (doc.getLong("stars") ?: 5L).toInt(),
+                        comment   = doc.getString("comment") ?: "",
+                        createdAt = (doc.getDouble("createdAt") ?: 0.0).toLong()
+                    )
+                } catch (e: Exception) { null }
+            }
+            reviewList.clear()
+            reviewList.addAll(list)
+        }
+    }
+
+    fun updateOrderStatus(order: Order, status: String, onDone: () -> Unit = {}) = scope.launch {        val fsId = order.firestoreId
         if (fsId.isEmpty()) return@launch
         db.collection("orders").document(fsId).update("status", status).await()
-        if (status == "Đã hủy") {
+        if (status == "Đã hủy" || status == "Trả hàng") {
             order.items.forEach { ci ->
                 if (ci.product.firestoreId.isNotEmpty()) increaseStock(ci.product.firestoreId, ci.quantity)
             }

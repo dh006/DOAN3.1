@@ -30,5 +30,19 @@ data class Order(
     val address: String       = "",
     val total: Long           = 0L,
     var status: String        = "Chờ xác nhận",
+    // Chờ xác nhận | Đã xác nhận | Đang giao | Đã nhận hàng | Trả hàng | Hoàn thành | Đã hủy
     val firestoreId: String   = ""
 )
+
+// ── Reviews ───────────────────────────────────────────────────────────────────
+data class Review(
+    val id: Int            = 0,
+    val productFirestoreId: String = "",
+    val username: String   = "",
+    val stars: Int         = 5,       // 1–5
+    val comment: String    = "",
+    val createdAt: Long    = System.currentTimeMillis()
+)
+
+val reviewList = androidx.compose.runtime.mutableStateListOf<Review>()
+fun nextReviewId() = (reviewList.maxOfOrNull { it.id } ?: 0) + 1

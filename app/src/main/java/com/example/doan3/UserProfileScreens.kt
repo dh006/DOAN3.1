@@ -13,8 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.outlined.*import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -171,8 +170,29 @@ fun UserOrderDetailDialog(
     onCancel: (Order) -> Unit,
     onReorder: (Order) -> Unit
 ) {
-    val canCancel = order.status == "Chờ xác nhận"
-    val canReorder = order.status == "Hoàn thành" || order.status == "Đã hủy"
+    val canCancel  = order.status == "Chờ xác nhận"
+    val canReceive = order.status == "Đang giao"
+    val canReturn  = order.status == "Đã nhận hàng" || order.status == "Hoàn thành"
+    val canReorder = order.status == "Hoàn thành" || order.status == "Đã hủy" || order.status == "Trả hàng"
+    val canReview  = order.status == "Đã nhận hàng" || order.status == "Hoàn thành"
+
+    var showReviewDialog by remember { mutableStateOf(false) }
+    var reviewProduct by remember { mutableStateOf<CartItem?>(null) }
+
+    if (showReviewDialog && reviewProduct != null) {
+        ReviewDialog(
+            product = reviewProduct!!.product,
+            username = order.username,
+            onDismiss = { showReviewDialog = false; reviewProduct = null },
+            onSubmit = { stars, comment ->
+                com.example.doan3.firebase.FirebaseManager.saveReview(
+                    Review(id = nextReviewId(), productFirestoreId = reviewProduct!!.product.firestoreId,
+                        username = order.username, stars = stars, comment = comment)
+                )
+                showReviewDialog = false; reviewProduct = null
+            }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = Color.White,
@@ -180,13 +200,7 @@ fun UserOrderDetailDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Status badge
-                val (sc, sb) = when (order.status) {
-                    "Chờ xác nhận" -> Color(0xFFF59E0B) to Color(0xFFFFF8E1)
-                    "Đang giao"    -> Color(0xFF1565C0) to Color(0xFFE3F2FD)
-                    "Hoàn thành"   -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
-                    "Đã hủy"       -> AccentRed to Color(0xFFFFEBEE)
-                    else           -> Color.Gray to SurfaceGray
-                }
+                val (sc, sb) = statusColor(order.status)
                 Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(sb)
                     .padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Text(order.status, color = sc, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -211,35 +225,106 @@ fun UserOrderDetailDialog(
                 Text("Tổng: ${formatPrice(order.total)}", fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp, color = PrimaryBlack)
 
+                // Action buttons
+                if (canReceive) {
+                    Button(onClick = { com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, "Đã nhận hàng") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))) {
+                        Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp)); Text("Xác nhận đã nhận hàng", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (canReview) {
+                    OutlinedButton(onClick = { reviewProduct = order.items.firstOrNull(); showReviewDialog = true },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF59E0B))) {
+                        Icon(Icons.Filled.Star, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp)); Text("Đánh giá sản phẩm", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (canReturn) {
+                    OutlinedButton(onClick = { com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, "Trả hàng") },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1565C0))) {
+                        Icon(Icons.Filled.Undo, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp)); Text("Trả hàng", fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 if (canCancel) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    OutlinedButton(
-                        onClick = { onCancel(order) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
+                    OutlinedButton(onClick = { onCancel(order) },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
-                        border = ButtonDefaults.outlinedButtonBorder
-                    ) {
+                        border = ButtonDefaults.outlinedButtonBorder) {
                         Icon(Icons.Filled.Cancel, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Hủy đơn hàng", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(6.dp)); Text("Hủy đơn hàng", fontWeight = FontWeight.SemiBold)
                     }
                 }
                 if (canReorder) {
-                    Button(
-                        onClick = { onReorder(order) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlack)
-                    ) {
+                    Button(onClick = { onReorder(order) },
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlack)) {
                         Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Mua lại", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(6.dp)); Text("Mua lại", fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Đóng") } }
+    )
+}
+
+fun statusColor(status: String): Pair<Color, Color> = when (status) {
+    "Chờ xác nhận" -> Color(0xFFF59E0B) to Color(0xFFFFF8E1)
+    "Đã xác nhận"  -> Color(0xFF1565C0) to Color(0xFFE3F2FD)
+    "Đang giao"    -> Color(0xFF6A1B9A) to Color(0xFFF3E5F5)
+    "Đã nhận hàng" -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
+    "Trả hàng"     -> Color(0xFFE65100) to Color(0xFFFFF3E0)
+    "Hoàn thành"   -> Color(0xFF2E7D32) to Color(0xFFE8F5E9)
+    "Đã hủy"       -> AccentRed to Color(0xFFFFEBEE)
+    else           -> Color.Gray to Color(0xFFF5F5F5)
+}
+
+@Composable
+fun ReviewDialog(
+    product: Product,
+    username: String,
+    onDismiss: () -> Unit,
+    onSubmit: (Int, String) -> Unit
+) {
+    var stars by remember { mutableIntStateOf(5) }
+    var comment by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Color.White,
+        title = { Text("Đánh giá sản phẩm", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(product.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                // Star selector
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(5) { i ->
+                        Icon(Icons.Filled.Star, null,
+                            tint = if (i < stars) Color(0xFFFFC107) else Color(0xFFDDDDDD),
+                            modifier = Modifier.size(32.dp).clickable { stars = i + 1 })
+                    }
+                }
+                Text(when (stars) {
+                    1 -> "😞 Rất tệ"; 2 -> "😕 Tệ"; 3 -> "😐 Bình thường"
+                    4 -> "😊 Tốt"; else -> "🤩 Xuất sắc!"
+                }, fontSize = 13.sp, color = Color(0xFFF59E0B), fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(value = comment, onValueChange = { comment = it },
+                    label = { Text("Nhận xét (tuỳ chọn)") },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryBlack))
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSubmit(stars, comment) },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlack),
+                shape = RoundedCornerShape(10.dp)) { Text("Gửi đánh giá") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy") } }
     )
 }
 
