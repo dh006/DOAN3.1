@@ -1,0 +1,84 @@
+@startuml So_Do_Trinh_Tu
+title Sơ Đồ Trình Tự — Luồng Đặt Hàng Hoàn Chỉnh (Thanh Toán SePay)
+
+skinparam backgroundColor #FAFAFA
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+skinparam sequenceMessageAlign center
+skinparam noteBorderColor #AAAAAA
+skinparam noteBackgroundColor #FFFDE7
+
+actor       "Khách Hàng"           as KH
+participant "Màn Hình Giỏ Hàng"    as GH
+participant "Màn Hình Thanh Toán\nSePay QR" as QR
+participant "Quản Lý Firebase"     as FM
+database    "Firestore\n(đơn hàng)"   as FS_DH
+database    "Firestore\n(sản phẩm)"   as FS_SP
+
+== Thêm Vào Giỏ Hàng ==
+KH -> GH : Chọn size, nhấn "Thêm vào giỏ"
+GH -> GH : themVaoGioHang(sanPham, size)
+GH --> KH : Huy hiệu giỏ hàng cập nhật (+1)
+
+== Đặt Hàng — Thanh Toán SePay ==
+KH -> GH : Nhập địa chỉ, chọn SePay QR\nnhấn "Thanh toán QR"
+GH -> GH : Kiểm tra: đã đăng nhập?\nĐịa chỉ không trống?
+GH -> QR : Mở MànHìnhThanhToánSePay(tongTien, noiDung)
+
+QR -> QR : taoMaQRVietQR(tongTien, noiDung)
+note right of QR
+  ZXing tạo mã QR ngoại tuyến
+  chuẩn VietQR EMVCo
+  (không cần internet)
+end note
+QR --> KH : Hiển thị mã QR + thông tin ngân hàng\n(MB Bank 0383562784, số tiền, nội dung CK)
+
+KH -> KH : Mở app ngân hàng, quét mã QR\nChuyển khoản với đúng nội dung
+KH -> QR : Nhấn "✅ Tôi đã chuyển khoản xong"
+
+QR -> QR : daDanhDau = true
+QR -> FM : datHang(DonHang)
+FM -> FS_DH : them(MoHinhDonHang)
+FS_DH --> FM : maTaiLieu
+FM -> FS_DH : capNhat("id", maTaiLieu)
+
+loop Với mỗi sản phẩm trong đơn hàng
+    FM -> FS_SP : lay(maSanPham)
+    FS_SP --> FM : tonKhoHienTai
+    FM -> FS_SP : capNhat("tonKho", tonKhoHienTai - soLuong)
+end
+
+FM --> QR : hoàn thành()
+QR --> GH : daDatHang()
+GH --> KH : Hiển thị "🎉 Đặt hàng thành công!"
+GH -> GH : Xóa giỏ hàng
+
+== Quản Trị Viên Cập Nhật Trạng Thái Đơn Hàng ==
+actor "Quản Trị Viên" as QTV
+participant "Quản Lý Đơn Hàng\n(Admin)" as QLDH
+
+QTV -> QLDH : Xem danh sách đơn hàng\n(mới nhất lên đầu)
+QTV -> QLDH : Nhấn vào đơn → Hộp thoại chi tiết
+QTV -> QLDH : Đổi trạng thái sang "Đang giao"
+QLDH -> FM : capNhatTrangThaiDonHang(donHang, "Đang giao")
+FM -> FS_DH : capNhat("trangThai", "Đang giao")
+FS_DH --> FM : thành công
+FM -> FM : Listener Firestore kích hoạt
+FM -> FM : danhSachDonHang cập nhật (thời gian thực)
+QLDH --> QTV : Huy hiệu trạng thái cập nhật
+
+== Khách Hàng Xác Nhận Nhận Hàng ==
+KH -> GH : Mở "Đơn hàng của tôi"
+KH -> GH : Nhấn đơn → "Xác nhận đã nhận hàng"
+GH -> FM : capNhatTrangThaiDonHang(donHang, "Đã nhận hàng")
+FM -> FS_DH : capNhat("trangThai", "Đã nhận hàng")
+
+== Khách Hàng Viết Đánh Giá ==
+KH -> GH : Nhấn "Đánh giá sản phẩm"
+KH -> GH : Chọn 5 sao, viết nhận xét, gửi
+GH -> FM : luuDanhGia(DanhGia)
+FM -> FS_DH : them(MoHinhDanhGia) vào collection "reviews"
+FM -> FM : danhSachDanhGia cập nhật (thời gian thực)
+GH --> KH : Đánh giá hiển thị trên\nMàn hình Chi tiết sản phẩm
+
+@enduml

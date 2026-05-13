@@ -1,0 +1,40 @@
+@startuml Sequence_Register
+title Sequence Diagram — User Registration Flow
+
+actor User
+participant "RegisterScreen" as RS
+participant "FirebaseManager" as FM
+database "Firestore\n(users)" as FS
+
+User -> RS : Fill form & tap "Đăng ký"
+RS -> RS : Validate locally\n(blank fields, email format,\npassword length, password match)
+
+alt Validation failed
+    RS --> User : Show error message
+else Validation passed
+    RS -> FM : register(username, email, phone, password)
+
+    FM -> FS : query whereEqualTo("username", username)
+    FS --> FM : result
+
+    alt Username exists
+        FM --> RS : return "Tên đăng nhập đã được sử dụng"
+        RS --> User : Show error
+    else Username available
+        FM -> FS : query whereEqualTo("email", email)
+        FS --> FM : result
+
+        alt Email exists
+            FM --> RS : return "Email này đã được đăng ký"
+            RS --> User : Show error
+        else Email available
+            FM -> FS : add(userModel)
+            FS --> FM : documentRef.id
+            FM -> FS : update("id", ref.id)
+            FM --> RS : return null (success)
+            RS --> User : Show "Đăng ký thành công!" dialog
+        end
+    end
+end
+
+@enduml

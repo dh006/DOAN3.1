@@ -1,0 +1,28 @@
+@startuml So_Do_Boi_Canh
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+title Sơ Đồ Bối Cảnh Hệ Thống — Ứng Dụng Mua Sắm Thời Trang
+
+' ── Người dùng ────────────────────────────────────────────────────────────────
+Person(khachHang, "Khách Hàng", "Người dùng đã đăng ký. Duyệt sản phẩm thời trang, đặt hàng, viết đánh giá và quản lý tài khoản cá nhân.")
+Person(quanTriVien, "Quản Trị Viên", "Người dùng có quyền đặc biệt. Quản lý sản phẩm, tồn kho, đơn hàng và tài khoản người dùng qua trang Admin.")
+
+' ── Hệ thống chính ────────────────────────────────────────────────────────────
+System(ungDung, "Ứng Dụng Mua Sắm\nThời Trang (Android)", "Ứng dụng di động Android xây dựng bằng Kotlin và Jetpack Compose. Cung cấp trải nghiệm mua sắm cho khách hàng và công cụ quản lý cho quản trị viên.")
+
+' ── Hệ thống bên ngoài ────────────────────────────────────────────────────────
+System_Ext(firestore, "Firebase Firestore\n(Google Cloud)", "Cơ sở dữ liệu NoSQL thời gian thực trên đám mây. Lưu trữ sản phẩm, người dùng, đơn hàng và đánh giá.")
+System_Ext(sepay, "Cổng Thanh Toán SePay", "Cổng thanh toán Việt Nam. Tạo mã QR chuyển khoản ngân hàng MB Bank số tài khoản 0383562784.")
+System_Ext(vietqr, "Thư Viện ZXing / VietQR", "Thư viện tạo mã QR ngoại tuyến. Tạo mã QR chuẩn VietQR EMVCo cho chuyển khoản ngân hàng không cần internet.")
+System_Ext(coil, "Dịch Vụ Tải Ảnh Coil", "Thư viện tải ảnh Android. Tải ảnh sản phẩm và ảnh đại diện người dùng từ URL bên ngoài.")
+
+' ── Quan hệ ───────────────────────────────────────────────────────────────────
+Rel(khachHang, ungDung, "Duyệt sản phẩm, đặt hàng, viết đánh giá", "Ứng dụng Android")
+Rel(quanTriVien, ungDung, "Quản lý sản phẩm, đơn hàng, tồn kho, người dùng", "Trang Admin")
+Rel(ungDung, firestore, "Đọc/Ghi dữ liệu thời gian thực", "Firebase SDK (HTTPS)")
+Rel(ungDung, sepay, "Tạo mã QR thanh toán", "HTTPS")
+Rel(ungDung, vietqr, "Tạo mã QR ngoại tuyến", "Thư viện ZXing")
+Rel(ungDung, coil, "Tải ảnh sản phẩm và đại diện", "HTTPS")
+
+@enduml

@@ -1,0 +1,21 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context Diagram — Fashion Shop Mobile Application
+
+Person(customer, "Customer", "A registered user who browses products, places orders, writes reviews, and manages their account.")
+Person(admin, "Administrator", "A privileged user who manages products, inventory, orders, and user accounts via the Admin Panel.")
+
+System(fashionApp, "Fashion Shop App", "Android mobile application built with Kotlin + Jetpack Compose. Provides shopping and admin management features.")
+
+System_Ext(firestore, "Firebase Firestore", "Google Cloud NoSQL database. Stores products, users, orders, and reviews with real-time synchronization.")
+System_Ext(coil, "Coil Image Service", "External image hosting. Product and avatar images are loaded from URLs provided by the admin.")
+
+Rel(customer, fashionApp, "Uses", "Android App")
+Rel(admin, fashionApp, "Uses", "Android App (Admin Panel)")
+Rel(fashionApp, firestore, "Reads/Writes data", "Firebase SDK (HTTPS)")
+Rel(fashionApp, coil, "Loads images from", "HTTPS")
+
+@enduml

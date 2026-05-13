@@ -326,7 +326,8 @@ fun ProductDetailScreen(
 
 @Composable
 fun ReviewSection(product: Product, currentUsername: String) {
-    val productReviews = reviewList.filter { it.productFirestoreId == product.firestoreId }
+    val productReviews = if (product.firestoreId.isBlank()) emptyList()
+    else reviewList.filter { it.productFirestoreId == product.firestoreId }
     val avgStars = if (productReviews.isEmpty()) 0f
     else productReviews.sumOf { it.stars }.toFloat() / productReviews.size
 

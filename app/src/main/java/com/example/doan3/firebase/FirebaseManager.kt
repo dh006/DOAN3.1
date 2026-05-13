@@ -365,6 +365,7 @@ object FirebaseManager {
         try {
             val model = mapOf(
                 "productFirestoreId" to review.productFirestoreId,
+
                 "username"  to review.username,
                 "stars"     to review.stars,
                 "comment"   to review.comment,

@@ -1,0 +1,83 @@
+@startuml C4_Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram — Fashion Shop Android Application
+
+Container_Ext(firestore, "Firebase Firestore", "Google Cloud", "Stores all application data.")
+
+Container_Boundary(app, "Fashion Shop Android App") {
+
+    ' ── Navigation / Root ──────────────────────────────────────────
+    Component(shopApp, "ShopApp", "Composable", "Root composable. Manages global navigation state (showCart, showAdmin, selectedProduct) and shared state (cartItems, favorites, currentUsername).")
+
+    ' ── User Screens ───────────────────────────────────────────────
+    Component(homeScreen, "HomeScreen", "Composable", "Displays product grid with category filter tabs and TopBar (search, cart badge).")
+    Component(searchScreen, "SearchScreen", "Composable", "Real-time product search with category filter.")
+    Component(productDetail, "ProductDetailScreen", "Composable", "Product image, stock warning, color/size selector, add to cart, and ReviewSection.")
+    Component(reviewSection, "ReviewSection", "Composable", "Star rating overview (bar chart), write review form, and list of user comments with avatars.")
+    Component(cartScreen, "CartScreen", "Composable", "Cart item list, quantity controls, address input, order placement with login guard.")
+    Component(favoriteScreen, "FavoriteScreen", "Composable", "Grid of favorited products.")
+    Component(exploreScreen, "ExploreScreen", "Composable", "Shop introduction page: hero banner, trends, style guides, care tips.")
+
+    ' ── Account / Profile ──────────────────────────────────────────
+    Component(accountTab, "AccountTabScreen", "Composable", "Manages login/register/profile sub-navigation within the Account tab.")
+    Component(loginScreen, "LoginScreen", "Composable", "Username + password login form with loading state.")
+    Component(registerScreen, "RegisterScreen", "Composable", "Registration form with duplicate username/email validation.")
+    Component(profileScreen, "UserProfileScreen", "Composable", "Avatar (URL), username, email display. Menu: Info, Orders, Change Password, Logout.")
+    Component(userInfo, "UserInfoScreen", "Composable", "Displays user account details.")
+    Component(userOrders, "UserOrdersScreen", "Composable", "Order history list with status badges. Actions: confirm receipt, return, cancel, reorder, review.")
+    Component(changePassword, "ChangePasswordScreen", "Composable", "Old password verification + new password form.")
+
+    ' ── Admin Screens ──────────────────────────────────────────────
+    Component(adminHome, "AdminHomeScreen", "Composable", "Dashboard with stat cards (products, orders, users) and navigation menu.")
+    Component(adminProducts, "AdminProductsScreen", "Composable", "Product list with category filter. Add/Edit/Delete with image preview and stock field.")
+    Component(adminOrders, "AdminOrdersScreen", "Composable", "Order list with 7-status filter. Update status, cancel orders.")
+    Component(adminInventory, "AdminInventoryScreen", "Composable", "Product list showing stock levels and sold count. Edit stock quantity.")
+    Component(adminUsers, "AdminUsersScreen", "Composable", "User list with role badges. Edit username/email/role, delete non-admin users.")
+
+    ' ── Data Layer ─────────────────────────────────────────────────
+    Component(firebaseManager, "FirebaseManager", "Kotlin Singleton", "All Firestore operations:\n- listenProducts/Users/Orders/Reviews\n- addProduct, updateProduct, deleteProduct\n- login, register, updateAvatar, changePassword\n- placeOrder, updateOrderStatus\n- decreaseStock, increaseStock\n- saveReview")
+    Component(appState, "AppState", "Global State", "productList, userAccounts, orderList, reviewList (mutableStateListOf). Updated by FirebaseManager listeners.")
+    Component(firestoreModels, "FirestoreModels", "Data Classes", "ProductModel, UserModel, OrderModel, OrderItem. Map to Firestore documents.")
+}
+
+' ── Relationships ──────────────────────────────────────────────────
+Rel(shopApp, homeScreen, "Shows")
+Rel(shopApp, searchScreen, "Shows")
+Rel(shopApp, productDetail, "Shows")
+Rel(shopApp, cartScreen, "Shows")
+Rel(shopApp, favoriteScreen, "Shows (tab 1)")
+Rel(shopApp, exploreScreen, "Shows (tab 2)")
+Rel(shopApp, accountTab, "Shows (tab 3)")
+Rel(shopApp, adminHome, "Shows when admin logged in")
+
+Rel(productDetail, reviewSection, "Contains")
+Rel(accountTab, loginScreen, "Navigates to")
+Rel(accountTab, registerScreen, "Navigates to")
+Rel(accountTab, profileScreen, "Shows when logged in")
+Rel(profileScreen, userInfo, "Navigates to")
+Rel(profileScreen, userOrders, "Navigates to")
+Rel(profileScreen, changePassword, "Navigates to")
+
+Rel(adminHome, adminProducts, "Navigates to")
+Rel(adminHome, adminOrders, "Navigates to")
+Rel(adminHome, adminInventory, "Navigates to")
+Rel(adminHome, adminUsers, "Navigates to")
+
+Rel(homeScreen, appState, "Reads productList")
+Rel(cartScreen, firebaseManager, "Calls placeOrder()")
+Rel(reviewSection, firebaseManager, "Calls saveReview()")
+Rel(loginScreen, firebaseManager, "Calls login()")
+Rel(registerScreen, firebaseManager, "Calls register()")
+Rel(adminProducts, firebaseManager, "Calls addProduct/updateProduct/deleteProduct()")
+Rel(adminOrders, firebaseManager, "Calls updateOrderStatus()")
+Rel(adminInventory, firebaseManager, "Calls updateProductStock()")
+Rel(adminUsers, firebaseManager, "Calls updateUser/deleteUser()")
+
+Rel(firebaseManager, appState, "Updates via real-time listeners")
+Rel(firebaseManager, firestoreModels, "Uses for mapping")
+Rel(firebaseManager, firestore, "Reads/Writes", "Firebase SDK")
+
+@enduml

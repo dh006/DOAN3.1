@@ -338,23 +338,6 @@ fun ProductCard(
                         modifier = Modifier.size(17.dp)
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(32.dp)
-                        .shadow(4.dp, CircleShape)
-                        .background(Color.White, CircleShape)
-                        .clickable { onFavoriteClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = null,
-                        tint = if (isFavorite) AccentRed else Color.Gray,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
             }
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                 Text(product.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = PrimaryBlack)

@@ -1,0 +1,58 @@
+@startuml So_Do_Container
+
+skinparam backgroundColor #FAFAFA
+skinparam componentStyle rectangle
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.5
+skinparam rectangleBorderColor #888888
+skinparam rectangleBackgroundColor #DDEEFF
+skinparam actorBackgroundColor #FFEECC
+skinparam databaseBackgroundColor #DDFFDD
+skinparam noteBackgroundColor #FFFDE7
+
+title Sơ Đồ Container\nỨng Dụng Mua Sắm Thời Trang
+
+' ── Người dùng ────────────────────────────────────────────────────────────────
+actor "Khách Hàng" as KH
+actor "Quản Trị Viên" as QTV
+
+' ── Hệ thống chính ────────────────────────────────────────────────────────────
+rectangle "Ứng Dụng Android (Kotlin + Jetpack Compose)" {
+
+    rectangle "Giao Diện Khách Hàng\n[Kotlin / Jetpack Compose]\n\nTrang chủ · Tìm kiếm\nChi tiết sản phẩm · Giỏ hàng\nYêu thích · Tài khoản\nHồ sơ · Đơn hàng · Đánh giá" as uiKH #DDEEFF
+
+    rectangle "Giao Diện Quản Trị\n[Kotlin / Jetpack Compose]\n\nBảng điều khiển\nQuản lý sản phẩm\nQuản lý đơn hàng\nTồn kho · Người dùng" as uiAdmin #FFE0CC
+
+    rectangle "Trạng Thái Toàn Cục\n[Kotlin mutableStateListOf]\n\nDanh sách sản phẩm\nDanh sách đơn hàng\nTài khoản người dùng\nDanh sách đánh giá" as state #E8F5E9
+
+    rectangle "Quản Lý Firebase\n[Kotlin Singleton]\n\nLắng nghe thời gian thực\nCRUD sản phẩm / người dùng\nĐặt hàng · Tồn kho\nXác thực · Đánh giá" as fbMgr #FFF9C4
+
+    rectangle "Logic Giỏ Hàng & Thanh Toán\n[Kotlin]\n\nQuản lý giỏ hàng\nTính tổng tiền\nTạo mã QR VietQR (ZXing)\nXác nhận thanh toán" as cart #F3E5F5
+}
+
+' ── Hệ thống bên ngoài ────────────────────────────────────────────────────────
+database "Firebase Firestore\n[Google Cloud NoSQL]\n\nCollections:\nproducts · users\norders · reviews" as db #DDFFDD
+
+rectangle "SePay / VietQR\n[Cổng thanh toán]\n\nMã QR chuyển khoản\nMB Bank 0383562784" as sepay #FFCCCC
+
+rectangle "Máy Chủ Ảnh\n[HTTPS]\n\nẢnh sản phẩm\nẢnh đại diện người dùng" as imgHost #E0E0E0
+
+' ── Quan hệ ───────────────────────────────────────────────────────────────────
+KH --> uiKH : Tương tác
+QTV --> uiAdmin : Tương tác
+
+uiKH --> state : Đọc trạng thái
+uiAdmin --> state : Đọc trạng thái
+uiKH --> fbMgr : Gọi thao tác dữ liệu
+uiAdmin --> fbMgr : Gọi thao tác CRUD
+uiKH --> cart : Sử dụng giỏ hàng & thanh toán
+
+fbMgr --> state : Cập nhật qua listener
+fbMgr --> db : Đọc/Ghi [Firebase SDK]
+
+cart --> sepay : Tạo URL mã QR [HTTPS]
+uiKH --> imgHost : Tải ảnh [Coil/HTTPS]
+
+@enduml

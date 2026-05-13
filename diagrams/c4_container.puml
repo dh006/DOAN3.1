@@ -1,0 +1,36 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram — Fashion Shop Mobile Application
+
+Person(customer, "Customer", "Browses products, places orders, writes reviews.")
+Person(admin, "Administrator", "Manages products, orders, inventory, users.")
+
+System_Boundary(app, "Fashion Shop Android App") {
+
+    Container(userUI, "User Interface Layer", "Kotlin / Jetpack Compose", "Screens: Home, Search, Product Detail, Cart, Favorites, Account, Profile, Orders, Reviews.")
+
+    Container(adminUI, "Admin Interface Layer", "Kotlin / Jetpack Compose", "Screens: Admin Dashboard, Product Management, Order Management, Inventory, User Management.")
+
+    Container(appState, "App State", "Kotlin mutableStateListOf", "Global in-memory state: productList, orderList, userAccounts, reviewList. Updated by real-time Firestore listeners.")
+
+    Container(firebaseManager, "Firebase Manager", "Kotlin Singleton Object", "Handles all Firestore operations: real-time listeners, CRUD for products/users/orders/reviews, stock management, authentication.")
+}
+
+System_Ext(firestore, "Firebase Firestore", "Google Cloud NoSQL database.\nCollections: products, users, orders, reviews.")
+System_Ext(imageHost, "External Image Host", "Any HTTPS image URL.\nUsed for product images and user avatars.")
+
+Rel(customer, userUI, "Interacts with", "Touch")
+Rel(admin, adminUI, "Interacts with", "Touch")
+Rel(userUI, appState, "Reads state from")
+Rel(adminUI, appState, "Reads state from")
+Rel(userUI, firebaseManager, "Calls")
+Rel(adminUI, firebaseManager, "Calls")
+Rel(firebaseManager, appState, "Updates via listeners")
+Rel(firebaseManager, firestore, "Reads/Writes", "Firebase SDK")
+Rel(userUI, imageHost, "Loads images from", "Coil / HTTPS")
+Rel(adminUI, imageHost, "Loads images from", "Coil / HTTPS")
+
+@enduml

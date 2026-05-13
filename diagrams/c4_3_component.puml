@@ -1,0 +1,95 @@
+@startuml So_Do_Thanh_Phan
+
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #555555
+skinparam ArrowThickness 1.5
+skinparam packageBackgroundColor #F5F5F5
+skinparam packageBorderColor #AAAAAA
+skinparam componentBackgroundColor #DDEEFF
+skinparam componentBorderColor #5588AA
+skinparam databaseBackgroundColor #DDFFDD
+
+title Sơ Đồ Thành Phần\nỨng Dụng Mua Sắm Thời Trang
+
+database "Firebase Firestore" as db #DDFFDD
+
+package "Ứng Dụng Mua Sắm Thời Trang (Android)" {
+
+    package "Điều Hướng Gốc" {
+        [ShopApp\n(Màn Hình Gốc)] as root #FFFDE7
+    }
+
+    package "Màn Hình Khách Hàng" {
+        [Trang Chủ] as trangChu
+        [Tìm Kiếm] as timKiem
+        [Chi Tiết Sản Phẩm] as chiTiet
+        [Đánh Giá & Bình Luận] as danhGia
+        [Giỏ Hàng] as gioHang
+        [Thanh Toán SePay QR] as sePayUI
+        [Yêu Thích] as yeuThich
+        [Khám Phá] as khamPha
+    }
+
+    package "Tài Khoản & Hồ Sơ" {
+        [Tab Tài Khoản] as tabTK
+        [Đăng Nhập] as dangNhap
+        [Đăng Ký] as dangKy
+        [Hồ Sơ Cá Nhân] as hoSo
+        [Đơn Hàng Của Tôi] as donHang
+        [Đổi Mật Khẩu] as doiMK
+    }
+
+    package "Trang Quản Trị Admin" {
+        [Bảng Điều Khiển] as adminHome #FFE0CC
+        [Quản Lý Sản Phẩm] as adminSP #FFE0CC
+        [Quản Lý Đơn Hàng] as adminDH #FFE0CC
+        [Quản Lý Tồn Kho] as adminTK #FFE0CC
+        [Quản Lý Người Dùng] as adminND #FFE0CC
+    }
+
+    package "Tầng Dữ Liệu" {
+        [Quản Lý Firebase\n(Singleton)] as fbMgr #FFF9C4
+        [Trạng Thái Ứng Dụng\n(Global State)] as state #E8F5E9
+        [Mô Hình Dữ Liệu\n(Data Classes)] as models #F3E5F5
+    }
+}
+
+' ── Quan hệ điều hướng ────────────────────────────────────────────────────────
+root --> trangChu : Tab 0
+root --> yeuThich : Tab 1
+root --> khamPha : Tab 2
+root --> tabTK : Tab 3
+root --> timKiem : Overlay
+root --> gioHang : Overlay
+root --> chiTiet : Overlay
+root --> adminHome : Admin đăng nhập
+
+chiTiet --> danhGia : Chứa
+gioHang --> sePayUI : Mở khi chọn SePay
+tabTK --> dangNhap : Điều hướng
+tabTK --> dangKy : Điều hướng
+tabTK --> hoSo : Khi đã đăng nhập
+hoSo --> donHang : Điều hướng
+hoSo --> doiMK : Điều hướng
+adminHome --> adminSP : Điều hướng
+adminHome --> adminDH : Điều hướng
+adminHome --> adminTK : Điều hướng
+adminHome --> adminND : Điều hướng
+
+' ── Quan hệ dữ liệu ───────────────────────────────────────────────────────────
+dangNhap --> fbMgr : dangNhap()
+dangKy --> fbMgr : dangKy()
+gioHang --> fbMgr : datHang()
+danhGia --> fbMgr : luuDanhGia()
+adminSP --> fbMgr : CRUD sản phẩm
+adminDH --> fbMgr : capNhatTrangThai()
+adminTK --> fbMgr : capNhatTonKho()
+adminND --> fbMgr : sua/xoaNguoiDung()
+
+fbMgr --> state : Cập nhật qua listener
+fbMgr --> models : Ánh xạ dữ liệu
+fbMgr --> db : Đọc/Ghi [Firebase SDK]
+
+@enduml

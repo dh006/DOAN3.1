@@ -1,0 +1,34 @@
+@startuml Sequence_PlaceOrder
+title Sequence Diagram — Place Order Flow
+
+actor Customer
+participant "CartScreen" as Cart
+participant "FirebaseManager" as FM
+database "Firestore\n(orders)" as FS_Orders
+database "Firestore\n(products)" as FS_Products
+
+Customer -> Cart : Tap "Đặt hàng"
+Cart -> Cart : Check isLoggedIn
+
+alt Not logged in
+    Cart --> Customer : Show "Login Required" dialog
+    Customer -> Cart : Tap "Đăng nhập ngay"
+    Cart --> Customer : Navigate to Account tab
+else Logged in
+    Cart -> FM : placeOrder(order)
+    FM -> FS_Orders : add(OrderModel)
+    FS_Orders --> FM : documentRef.id
+    FM -> FS_Orders : update("id", ref.id)
+
+    loop For each CartItem
+        FM -> FS_Products : get(productId)
+        FS_Products --> FM : currentStock
+        FM -> FS_Products : update("stock", currentStock - qty)
+    end
+
+    FM --> Cart : onDone()
+    Cart --> Customer : Show "Đặt hàng thành công!" dialog
+    Cart -> Cart : Clear cartItems
+end
+
+@enduml
