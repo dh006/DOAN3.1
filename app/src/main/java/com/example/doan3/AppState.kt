@@ -46,3 +46,18 @@ data class Review(
 
 val reviewList = androidx.compose.runtime.mutableStateListOf<Review>()
 fun nextReviewId() = (reviewList.maxOfOrNull { it.id } ?: 0) + 1
+
+// ── Promo Codes ───────────────────────────────────────────────────────────────
+data class PromoCode(
+    val id: String         = "",
+    val code: String       = "",          // mã nhập (vd: SALE20)
+    val discountPercent: Int = 0,          // % giảm (1–100)
+    val maxDiscount: Long  = 0L,           // giảm tối đa (đ), 0 = không giới hạn
+    val minOrder: Long     = 0L,           // đơn tối thiểu để áp dụng
+    val usageLimit: Int    = 0,            // lượt dùng tối đa, 0 = không giới hạn
+    val usedCount: Int     = 0,            // đã dùng bao nhiêu lần
+    val active: Boolean    = true,         // còn hiệu lực không
+    val firestoreId: String = ""
+)
+
+val promoList = androidx.compose.runtime.mutableStateListOf<PromoCode>()

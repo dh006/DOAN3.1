@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -90,16 +91,44 @@ fun CartScreen(
     onBack: () -> Unit,
     onRequireLogin: () -> Unit = {}
 ) {
-    var address     by remember { mutableStateOf("") }
-    var payMethod   by remember { mutableStateOf(PaymentMethod.COD) }
-    var showSuccess by remember { mutableStateOf(false) }
-    var showLogin   by remember { mutableStateOf(false) }
-    var showQR      by remember { mutableStateOf(false) }
-    val total = cartItems.sumOf { parsePrice(it.product.price) * it.quantity }
+    var address       by remember { mutableStateOf("") }
+    var payMethod     by remember { mutableStateOf(PaymentMethod.COD) }
+    var showSuccess   by remember { mutableStateOf(false) }
+    var showLogin     by remember { mutableStateOf(false) }
+    var showQR        by remember { mutableStateOf(false) }
+
+    // ── Promo code state ──────────────────────────────────────────────────────
+    var promoInput    by remember { mutableStateOf("") }
+    var appliedPromo  by remember { mutableStateOf<PromoCode?>(null) }
+    var promoMessage  by remember { mutableStateOf("") }  // thông báo lỗi hoặc thành công
+    var promoSuccess  by remember { mutableStateOf(false) }
+
+    val subtotal = cartItems.sumOf { parsePrice(it.product.price) * it.quantity }
+    val discount  = if (appliedPromo != null) {
+        val raw = subtotal * appliedPromo!!.discountPercent / 100L
+        if (appliedPromo!!.maxDiscount > 0) minOf(raw, appliedPromo!!.maxDiscount) else raw
+    } else 0L
+    val total    = subtotal - discount
+
     val orderDesc = "DOAN3 $username ${System.currentTimeMillis() / 1000}"
 
+    fun placeOrder() {
+        com.example.doan3.firebase.FirebaseManager.placeOrder(
+            Order(id = nextOrderId(), username = username,
+                items = cartItems.toList(), address = address, total = total)
+        )
+        // Tăng usedCount nếu có dùng mã
+        val promoFsId = appliedPromo?.firestoreId
+        if (!promoFsId.isNullOrEmpty()) {
+            com.example.doan3.firebase.FirebaseManager.incrementPromoUsage(promoFsId)
+        }
+    }
+
     if (showSuccess) {
-        OrderSuccessDialog(payMethod) { cartItems.clear(); showSuccess = false; onBack() }
+        OrderSuccessDialog(payMethod) {
+            cartItems.clear(); appliedPromo = null; promoInput = ""
+            showSuccess = false; onBack()
+        }
     }
     if (showLogin) {
         AlertDialog(onDismissRequest = { showLogin = false }, containerColor = Color.White,
@@ -112,12 +141,7 @@ fun CartScreen(
     }
     if (showQR) {
         SePayQRScreen(total = total, description = orderDesc,
-            onPaid = {
-                com.example.doan3.firebase.FirebaseManager.placeOrder(
-                    Order(id = nextOrderId(), username = username,
-                        items = cartItems.toList(), address = address, total = total))
-                showQR = false; showSuccess = true
-            },
+            onPaid = { placeOrder(); showQR = false; showSuccess = true },
             onDismiss = { showQR = false })
         return
     }
@@ -126,6 +150,8 @@ fun CartScreen(
         bottomBar = {
             Surface(shadowElevation = 12.dp, color = Color.White) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+
+                    // ── Địa chỉ ──────────────────────────────────────────────
                     Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .border(1.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(12.dp))
                         .background(Color.White).padding(horizontal = 14.dp, vertical = 12.dp),
@@ -141,14 +167,147 @@ fun CartScreen(
                                 inner()
                             })
                     }
-                    Spacer(Modifier.height(12.dp))
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // ── Mã khuyến mãi ─────────────────────────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                                .border(
+                                    width = 1.5.dp,
+                                    color = when {
+                                        promoSuccess -> Color(0xFF2E7D32)
+                                        promoMessage.isNotEmpty() && !promoSuccess -> AccentRed
+                                        else -> Color(0xFFE0E0E0)
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .background(Color.White)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.LocalOffer, null,
+                                tint = if (promoSuccess) Color(0xFF2E7D32) else Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            BasicTextField(
+                                value = promoInput,
+                                onValueChange = {
+                                    promoInput = it.uppercase().replace(" ", "")
+                                    // Reset khi người dùng xóa hoặc thay đổi mã
+                                    if (appliedPromo != null && it.uppercase().trim() != appliedPromo!!.code) {
+                                        appliedPromo = null; promoMessage = ""; promoSuccess = false
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                textStyle = TextStyle(
+                                    fontSize = 14.sp,
+                                    color = if (promoSuccess) Color(0xFF2E7D32) else PrimaryBlack,
+                                    fontWeight = if (promoSuccess) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                cursorBrush = SolidColor(PrimaryBlack),
+                                singleLine = true,
+                                decorationBox = { inner ->
+                                    if (promoInput.isEmpty()) Text("Nhập mã khuyến mãi...", color = Color.LightGray, fontSize = 13.sp)
+                                    inner()
+                                }
+                            )
+                            // Nút xóa mã đã áp dụng
+                            if (appliedPromo != null) {
+                                Spacer(Modifier.width(4.dp))
+                                Box(modifier = Modifier.size(20.dp).clickable {
+                                    appliedPromo = null; promoInput = ""; promoMessage = ""; promoSuccess = false
+                                }, contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Close, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                if (promoInput.isBlank()) return@Button
+                                val found = com.example.doan3.firebase.FirebaseManager.validatePromoCode(promoInput, subtotal)
+                                if (found != null) {
+                                    appliedPromo = found
+                                    promoSuccess = true
+                                    promoMessage = "Giảm ${found.discountPercent}%${if (found.maxDiscount > 0) " (tối đa ${formatPrice(found.maxDiscount)})" else ""}"
+                                } else {
+                                    appliedPromo = null
+                                    promoSuccess = false
+                                    promoMessage = when {
+                                        promoList.none { it.code.equals(promoInput.trim(), true) } -> "Mã không tồn tại"
+                                        promoList.any { it.code.equals(promoInput.trim(), true) && !it.active } -> "Mã đã hết hạn"
+                                        else -> "Không áp dụng được cho đơn này"
+                                    }
+                                }
+                            },
+                            enabled = appliedPromo == null,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (promoSuccess) Color(0xFF2E7D32) else Color(0xFF00897B),
+                                disabledContainerColor = Color(0xFF2E7D32)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            if (promoSuccess) Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(16.dp))
+                            else Text("Áp dụng", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Thông báo mã (lỗi hoặc thành công)
+                    if (promoMessage.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (promoSuccess) Icons.Filled.CheckCircle else Icons.Filled.Info,
+                                null,
+                                tint = if (promoSuccess) Color(0xFF2E7D32) else AccentRed,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                promoMessage,
+                                fontSize = 12.sp,
+                                color = if (promoSuccess) Color(0xFF2E7D32) else AccentRed,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // ── Phương thức thanh toán ────────────────────────────────
                     Text("Phương thức thanh toán", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         PaymentOption("💵", "Tiền mặt\n(COD)", payMethod == PaymentMethod.COD, { payMethod = PaymentMethod.COD }, Modifier.weight(1f))
                         PaymentOption("📱", "Chuyển khoản\n(SePay QR)", payMethod == PaymentMethod.SEPAY, { payMethod = PaymentMethod.SEPAY }, Modifier.weight(1f))
                     }
-                    Spacer(Modifier.height(12.dp))
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // ── Tóm tắt giá ──────────────────────────────────────────
+                    if (appliedPromo != null) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text("Tạm tính", fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f))
+                            Text(formatPrice(subtotal), fontSize = 13.sp, color = Color.Gray)
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text("Giảm giá (${appliedPromo!!.code})", fontSize = 12.sp, color = Color(0xFF2E7D32), modifier = Modifier.weight(1f))
+                            Text("−${formatPrice(discount)}", fontSize = 13.sp, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        HorizontalDivider(color = Color(0xFFF0F0F0))
+                        Spacer(Modifier.height(4.dp))
+                    }
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Tổng cộng", fontSize = 12.sp, color = Color.Gray)
@@ -159,11 +318,7 @@ fun CartScreen(
                             if (!isLoggedIn) { showLogin = true; return@Button }
                             if (address.isBlank()) return@Button
                             when (payMethod) {
-                                PaymentMethod.COD -> {
-                                    com.example.doan3.firebase.FirebaseManager.placeOrder(
-                                        Order(id = nextOrderId(), username = username, items = cartItems.toList(), address = address, total = total))
-                                    showSuccess = true
-                                }
+                                PaymentMethod.COD -> { placeOrder(); showSuccess = true }
                                 PaymentMethod.SEPAY -> showQR = true
                             }
                         }, modifier = Modifier.height(50.dp).widthIn(min = 140.dp),

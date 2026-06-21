@@ -55,12 +55,14 @@ fun AdminScreen(onLogout: () -> Unit) {
             onProducts      = { screen = "products" },
             onOrders        = { screen = "orders" },
             onUsers         = { screen = "users" },
-            onInventory     = { screen = "inventory" }
+            onInventory     = { screen = "inventory" },
+            onPromos        = { screen = "promos" }
         )
         "products"  -> AdminProductsScreen(onBack = { screen = "home" })
         "orders"    -> AdminOrdersScreen(onBack = { screen = "home" })
         "users"     -> AdminUsersScreen(onBack = { screen = "home" }, onLogout = onLogout)
         "inventory" -> AdminInventoryScreen(onBack = { screen = "home" })
+        "promos"    -> AdminPromoScreen(onBack = { screen = "home" })
     }
 }
 
@@ -73,7 +75,8 @@ fun AdminHomeScreen(
     onProducts: () -> Unit,
     onOrders: () -> Unit,
     onUsers: () -> Unit,
-    onInventory: () -> Unit
+    onInventory: () -> Unit,
+    onPromos: () -> Unit
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -138,6 +141,84 @@ fun AdminHomeScreen(
                 }
             }
 
+            // Revenue stats row
+            item {
+                val completedOrders = orderList.filter { it.status == "Hoàn thành" || it.status == "Đã nhận hàng" }
+                val totalRevenue = completedOrders.sumOf { it.total }
+                val totalSold = completedOrders.sumOf { o -> o.items.sumOf { it.quantity } }
+                val pendingCount = orderList.count { it.status == "Chờ xác nhận" }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Tổng doanh thu
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF1A237E)
+                        ),
+                        elevation = CardDefaults.cardElevation(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+                                    .background(Color.White.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Filled.AttachMoney, null,
+                                    tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Tổng doanh thu", fontSize = 12.sp, color = Color.White.copy(0.75f))
+                                Text(formatPrice(totalRevenue),
+                                    fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = Color.White)
+                            }
+                        }
+                    }
+
+                    // Sp bán ra + đơn chờ
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                            elevation = CardDefaults.cardElevation(2.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.ShoppingBag, null,
+                                    tint = AdminGreen, modifier = Modifier.size(26.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("$totalSold", fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 22.sp, color = AdminGreen)
+                                Text("Sản phẩm đã bán", fontSize = 11.sp, color = Color.Gray,
+                                    textAlign = TextAlign.Center)
+                            }
+                        }
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                            elevation = CardDefaults.cardElevation(2.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Filled.HourglassEmpty, null,
+                                    tint = Color(0xFFF59E0B), modifier = Modifier.size(26.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("$pendingCount", fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 22.sp, color = Color(0xFFF59E0B))
+                                Text("Đơn chờ xác nhận", fontSize = 11.sp, color = Color.Gray,
+                                    textAlign = TextAlign.Center)
+                            }
+                        }
+                    }
+                }
+            }
+
             // Menu items
             item {
                 Text("Quản lý", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.Gray)
@@ -149,6 +230,8 @@ fun AdminHomeScreen(
                 Icons.Filled.Receipt, AdminBlue, onClick = onOrders) }
             item { AdminMenuItem("Quản lý Tồn kho", "Cập nhật số lượng sản phẩm",
                 Icons.Filled.Warehouse, AdminOrange, onClick = onInventory) }
+            item { AdminMenuItem("Mã Khuyến mãi", "Tạo và quản lý mã giảm giá",
+                Icons.Filled.LocalOffer, Color(0xFF00897B), onClick = onPromos) }
             item { AdminMenuItem("Quản lý Người dùng", "Xem và chỉnh sửa tài khoản",
                 Icons.Filled.Group, AdminGreen, onClick = onUsers) }
         }
@@ -486,59 +569,175 @@ fun AdminOrderRow(order: Order, onClick: () -> Unit) {
 
 @Composable
 fun OrderDetailDialog(order: Order, onDismiss: () -> Unit) {
-    val statusOptions = listOf("Chờ xác nhận", "Đã xác nhận", "Đang giao", "Đã nhận hàng", "Trả hàng", "Hoàn thành", "Đã hủy")
     var currentStatus by remember { mutableStateOf(order.status) }
+    var showCancelConfirm by remember { mutableStateOf(false) }
+
+    fun applyStatus(newStatus: String) {
+        currentStatus = newStatus
+        val idx = orderList.indexOfFirst { it.id == order.id }
+        if (idx >= 0) orderList[idx] = orderList[idx].copy(status = newStatus)
+        com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, newStatus)
+    }
+
+    if (showCancelConfirm) {
+        AlertDialog(
+            onDismissRequest = { showCancelConfirm = false },
+            containerColor = Color.White,
+            title = { Text("Hủy đơn hàng?", fontWeight = FontWeight.Bold) },
+            text = { Text("Xác nhận hủy đơn #${order.id}? Tồn kho sẽ được hoàn lại.") },
+            confirmButton = {
+                Button(onClick = {
+                    applyStatus("Đã hủy")
+                    showCancelConfirm = false
+                    onDismiss()
+                }, colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                    shape = RoundedCornerShape(10.dp)) { Text("Hủy đơn") }
+            },
+            dismissButton = { TextButton(onClick = { showCancelConfirm = false }) { Text("Quay lại") } }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss, containerColor = Color.White,
-        title = { Text("Đơn hàng #${order.id}", fontWeight = FontWeight.Bold) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Đơn hàng #${order.id}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                // Badge trạng thái hiện tại
+                val (stColor, stBg) = when (currentStatus) {
+                    "Chờ xác nhận" -> Color(0xFFF59E0B) to Color(0xFFFFF8E1)
+                    "Đã xác nhận"  -> AdminBlue to Color(0xFFE3F2FD)
+                    "Đang giao"    -> Color(0xFF6A1B9A) to Color(0xFFF3E5F5)
+                    "Đã nhận hàng" -> AdminGreen to Color(0xFFE8F5E9)
+                    "Hoàn thành"   -> AdminGreen to Color(0xFFE8F5E9)
+                    "Đã hủy"       -> AccentRed to Color(0xFFFFEBEE)
+                    else           -> Color.Gray to Color(0xFFF5F5F5)
+                }
+                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(stBg)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(currentStatus, color = stColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row { Icon(Icons.Filled.Person, null, tint = Color.Gray, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(order.username, fontSize = 14.sp) }
-                Row { Icon(Icons.Outlined.LocationOn, null, tint = Color.Gray, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(order.address.ifBlank { "Chưa có địa chỉ" }, fontSize = 13.sp, color = Color.Gray) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Person, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(order.username, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.Top) {
+                    Icon(Icons.Outlined.LocationOn, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(order.address.ifBlank { "Chưa có địa chỉ" }, fontSize = 13.sp, color = Color.Gray)
+                }
                 HorizontalDivider()
                 order.items.forEach { item ->
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("• ${item.product.name} (${item.size}) ×${item.quantity}", modifier = Modifier.weight(1f), fontSize = 13.sp)
-                        Text(formatPrice(parsePrice(item.product.price) * item.quantity), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("• ${item.product.name} (${item.size}) ×${item.quantity}",
+                            modifier = Modifier.weight(1f), fontSize = 13.sp)
+                        Text(formatPrice(parsePrice(item.product.price) * item.quantity),
+                            fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 HorizontalDivider()
-                Text("Tổng: ${formatPrice(order.total)}", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = AdminPurple)
+                Text("Tổng: ${formatPrice(order.total)}", fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp, color = AdminPurple)
+
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("Cập nhật trạng thái:", fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    statusOptions.forEach { s ->
-                        FilterChip(selected = currentStatus == s, onClick = {
-                            currentStatus = s
-                            val idx = orderList.indexOfFirst { it.id == order.id }
-                            if (idx >= 0) orderList[idx] = orderList[idx].copy(status = s)
-                            com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, s)
-                        }, label = { Text(s, fontSize = 10.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AdminBlue, selectedLabelColor = Color.White))
+
+                // ── Nút hành động theo luồng trạng thái ──────────────────────
+                Text("Hành động:", fontWeight = FontWeight.Medium, fontSize = 13.sp, color = Color.Gray)
+                Spacer(modifier = Modifier.height(2.dp))
+
+                when (currentStatus) {
+                    "Chờ xác nhận" -> {
+                        // Xác nhận đơn → chuyển sang Đã xác nhận
+                        Button(onClick = { applyStatus("Đã xác nhận") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = AdminBlue),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.CheckCircle, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Xác nhận đơn hàng")
+                        }
+                        OutlinedButton(onClick = { showCancelConfirm = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.Cancel, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Hủy đơn", color = AccentRed)
+                        }
+                    }
+                    "Đã xác nhận" -> {
+                        // Chuyển sang Đang giao
+                        Button(onClick = { applyStatus("Đang giao") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.LocalShipping, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Bắt đầu giao hàng")
+                        }
+                        OutlinedButton(onClick = { showCancelConfirm = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.Cancel, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Hủy đơn", color = AccentRed)
+                        }
+                    }
+                    "Đang giao" -> {
+                        // Hoàn thành giao hàng
+                        Button(onClick = { applyStatus("Hoàn thành") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = AdminGreen),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.DoneAll, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Đánh dấu hoàn thành")
+                        }
+                    }
+                    "Đã nhận hàng" -> {
+                        Button(onClick = { applyStatus("Hoàn thành") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = AdminGreen),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.DoneAll, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Xác nhận hoàn thành")
+                        }
+                    }
+                    "Trả hàng" -> {
+                        Button(onClick = { applyStatus("Đã hủy") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentRed),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Filled.Cancel, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Xác nhận hủy đơn trả hàng")
+                        }
+                    }
+                    "Hoàn thành", "Đã hủy" -> {
+                        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(if (currentStatus == "Hoàn thành") Color(0xFFE8F5E9) else Color(0xFFFFEBEE))
+                            .padding(12.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (currentStatus == "Hoàn thành") "✅ Đơn hàng đã hoàn thành"
+                                else "❌ Đơn hàng đã bị hủy",
+                                fontSize = 13.sp,
+                                color = if (currentStatus == "Hoàn thành") AdminGreen else AccentRed,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Admin có thể hủy đơn
-                if (order.status != "Đã hủy" && order.status != "Hoàn thành") {
-                    OutlinedButton(
-                        onClick = {
-                            val idx = orderList.indexOfFirst { it.id == order.id }
-                            if (idx >= 0) orderList[idx] = orderList[idx].copy(status = "Đã hủy")
-                            com.example.doan3.firebase.FirebaseManager.updateOrderStatus(order, "Đã hủy")
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentRed),
-                        shape = RoundedCornerShape(10.dp)
-                    ) { Text("Hủy đơn", color = AccentRed) }
-                }
-                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = AdminPurple),
-                    shape = RoundedCornerShape(10.dp)) { Text("Đóng") }
-            }
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = AdminPurple),
+                shape = RoundedCornerShape(10.dp)) { Text("Đóng") }
         }
     )
 }
@@ -780,4 +979,262 @@ fun AdminSubTopBar(title: String, onBack: () -> Unit) {
         Spacer(modifier = Modifier.size(38.dp))
     }
     HorizontalDivider(color = Color(0xFFF0F0F0))
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PROMO CODES — Quản lý mã khuyến mãi
+// ═════════════════════════════════════════════════════════════════════════════
+val AdminTeal      = Color(0xFF00897B)
+val AdminTealLight = Color(0xFFE0F2F1)
+
+@Composable
+fun AdminPromoScreen(onBack: () -> Unit) {
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<PromoCode?>(null) }
+    var deleteTarget by remember { mutableStateOf<PromoCode?>(null) }
+
+    if (showAddDialog || editTarget != null) {
+        PromoFormDialog(
+            existing = editTarget,
+            onDismiss = { showAddDialog = false; editTarget = null },
+            onSave = { p ->
+                if (editTarget != null) com.example.doan3.firebase.FirebaseManager.updatePromoCode(p)
+                else com.example.doan3.firebase.FirebaseManager.addPromoCode(p)
+                showAddDialog = false; editTarget = null
+            }
+        )
+    }
+
+    if (deleteTarget != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null }, containerColor = Color.White,
+            title = { Text("Xóa mã khuyến mãi", fontWeight = FontWeight.Bold) },
+            text = { Text("Xóa mã \"${deleteTarget!!.code}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    com.example.doan3.firebase.FirebaseManager.deletePromoCode(deleteTarget!!.firestoreId)
+                    deleteTarget = null
+                }) { Text("Xóa", color = AccentRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Hủy") } }
+        )
+    }
+
+    Scaffold(
+        containerColor = AdminBg,
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAddDialog = true },
+                containerColor = AdminTeal, contentColor = Color.White, shape = CircleShape) {
+                Icon(Icons.Filled.Add, "Thêm mã", modifier = Modifier.size(26.dp))
+            }
+        }
+    ) { pad ->
+        Column(modifier = Modifier.padding(pad).fillMaxSize()) {
+            AdminSubTopBar("Mã Khuyến mãi", onBack)
+
+            if (promoList.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("🏷️", fontSize = 48.sp)
+                        Spacer(Modifier.height(10.dp))
+                        Text("Chưa có mã khuyến mãi", color = Color.Gray, fontSize = 15.sp)
+                        Text("Nhấn + để tạo mã mới", color = Color.LightGray, fontSize = 12.sp)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(promoList, key = { it.firestoreId.ifEmpty { it.code } }) { promo ->
+                        AdminPromoRow(
+                            promo = promo,
+                            onEdit = { editTarget = promo },
+                            onDelete = { deleteTarget = promo },
+                            onToggle = {
+                                com.example.doan3.firebase.FirebaseManager.updatePromoCode(
+                                    promo.copy(active = !promo.active)
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminPromoRow(
+    promo: PromoCode,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggle: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = AdminCard),
+        elevation = CardDefaults.cardElevation(2.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Icon badge
+                Box(
+                    modifier = Modifier.size(46.dp).clip(RoundedCornerShape(13.dp))
+                        .background(if (promo.active) AdminTealLight else Color(0xFFF5F5F5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.LocalOffer, null,
+                        tint = if (promo.active) AdminTeal else Color.LightGray,
+                        modifier = Modifier.size(24.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(promo.code, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp,
+                            color = if (promo.active) PrimaryBlack else Color.Gray)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // Trạng thái badge
+                        Box(modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                            .background(if (promo.active) AdminTealLight else Color(0xFFF5F5F5))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)) {
+                            Text(if (promo.active) "Đang hoạt động" else "Tắt",
+                                fontSize = 10.sp,
+                                color = if (promo.active) AdminTeal else Color.Gray,
+                                fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        buildString {
+                            append("Giảm ${promo.discountPercent}%")
+                            if (promo.maxDiscount > 0) append(" (tối đa ${formatPrice(promo.maxDiscount)})")
+                            if (promo.minOrder > 0) append(" · Đơn từ ${formatPrice(promo.minOrder)}")
+                        },
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                    if (promo.usageLimit > 0) {
+                        Text("Đã dùng: ${promo.usedCount}/${promo.usageLimit} lượt",
+                            fontSize = 11.sp, color = Color(0xFFF59E0B))
+                    }
+                }
+                // Actions
+                IconButton(onClick = onToggle) {
+                    Icon(
+                        if (promo.active) Icons.Filled.ToggleOn else Icons.Filled.ToggleOff,
+                        null,
+                        tint = if (promo.active) AdminTeal else Color.LightGray,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Filled.Edit, null, tint = AdminBlue, modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Filled.Delete, null, tint = AccentRed, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PromoFormDialog(existing: PromoCode?, onDismiss: () -> Unit, onSave: (PromoCode) -> Unit) {
+    var code by remember { mutableStateOf(existing?.code ?: "") }
+    var discountPct by remember { mutableStateOf(existing?.discountPercent?.toString() ?: "10") }
+    var maxDiscount by remember { mutableStateOf(if ((existing?.maxDiscount ?: 0L) > 0) existing!!.maxDiscount.toString() else "") }
+    var minOrder by remember { mutableStateOf(if ((existing?.minOrder ?: 0L) > 0) existing!!.minOrder.toString() else "") }
+    var usageLimit by remember { mutableStateOf(if ((existing?.usageLimit ?: 0) > 0) existing!!.usageLimit.toString() else "") }
+    var active by remember { mutableStateOf(existing?.active ?: true) }
+    var error by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = Color.White,
+        title = {
+            Text(if (existing == null) "Tạo mã khuyến mãi" else "Sửa mã khuyến mãi",
+                fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.uppercase().replace(" ", "") },
+                    label = { Text("Mã khuyến mãi (vd: SALE20)") },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.LocalOffer, null, tint = AdminTeal, modifier = Modifier.size(20.dp)) },
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AdminTeal)
+                )
+                OutlinedTextField(
+                    value = discountPct,
+                    onValueChange = { discountPct = it.filter { c -> c.isDigit() } },
+                    label = { Text("Giảm giá (%)") },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Percent, null, tint = AdminTeal, modifier = Modifier.size(20.dp)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AdminTeal)
+                )
+                OutlinedTextField(
+                    value = maxDiscount,
+                    onValueChange = { maxDiscount = it.filter { c -> c.isDigit() } },
+                    label = { Text("Giảm tối đa (đ) — bỏ trống = không giới hạn") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AdminTeal)
+                )
+                OutlinedTextField(
+                    value = minOrder,
+                    onValueChange = { minOrder = it.filter { c -> c.isDigit() } },
+                    label = { Text("Đơn tối thiểu (đ) — bỏ trống = không yêu cầu") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AdminTeal)
+                )
+                OutlinedTextField(
+                    value = usageLimit,
+                    onValueChange = { usageLimit = it.filter { c -> c.isDigit() } },
+                    label = { Text("Giới hạn lượt dùng — bỏ trống = không giới hạn") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AdminTeal)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Kích hoạt ngay", fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = active, onCheckedChange = { active = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AdminTeal)
+                    )
+                }
+                if (error.isNotEmpty()) Text(error, color = AccentRed, fontSize = 12.sp)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val pct = discountPct.toIntOrNull()
+                    if (code.isBlank()) { error = "Vui lòng nhập mã khuyến mãi"; return@Button }
+                    if (pct == null || pct !in 1..100) { error = "% giảm phải từ 1–100"; return@Button }
+                    onSave(PromoCode(
+                        code            = code.uppercase().trim(),
+                        discountPercent = pct,
+                        maxDiscount     = maxDiscount.toLongOrNull() ?: 0L,
+                        minOrder        = minOrder.toLongOrNull() ?: 0L,
+                        usageLimit      = usageLimit.toIntOrNull() ?: 0,
+                        usedCount       = existing?.usedCount ?: 0,
+                        active          = active,
+                        firestoreId     = existing?.firestoreId ?: ""
+                    ))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = AdminTeal),
+                shape = RoundedCornerShape(10.dp)
+            ) { Text("Lưu") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Hủy", color = Color.Gray) } }
+    )
 }

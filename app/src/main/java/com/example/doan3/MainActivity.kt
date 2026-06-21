@@ -314,7 +314,13 @@ fun ProductCard(
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     )
                 } else {
-                    Icon(Icons.Outlined.Person, null, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(72.dp))
+                    // Placeholder khi chưa có ảnh — hiện icon thời trang
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("👗", fontSize = 40.sp)
+                            Text("Chưa có ảnh", fontSize = 10.sp, color = Color.White.copy(0.6f))
+                        }
+                    }
                 }
                 // Category badge
                 Box(

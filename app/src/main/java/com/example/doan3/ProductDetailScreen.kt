@@ -341,6 +341,14 @@ fun ReviewSection(product: Product, currentUsername: String) {
     var newComment by remember { mutableStateOf("") }
     val alreadyReviewed = productReviews.any { it.username == currentUsername }
 
+    // Kiểm tra đã mua và đơn đã được xác nhận thanh toán (Đã xác nhận / Đang giao / Đã nhận hàng / Hoàn thành)
+    val purchasedStatuses = setOf("Đã xác nhận", "Đang giao", "Đã nhận hàng", "Hoàn thành")
+    val hasPurchased = currentUsername.isNotBlank() && orderList.any { order ->
+        order.username == currentUsername &&
+        order.status in purchasedStatuses &&
+        order.items.any { it.product.firestoreId == product.firestoreId || it.product.name == product.name }
+    }
+
     Column {
         // ── Header ────────────────────────────────────────────────────────────
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -402,6 +410,24 @@ fun ReviewSection(product: Product, currentUsername: String) {
             Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .background(SurfaceGray).padding(16.dp), contentAlignment = Alignment.Center) {
                 Text("Đăng nhập để đánh giá sản phẩm", fontSize = 13.sp, color = Color.Gray)
+            }
+        } else if (!hasPurchased) {
+            // Chưa mua sản phẩm này
+            Box(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFFFF3E0)).padding(14.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Lock, null, tint = Color(0xFFE65100),
+                        modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Chỉ khách hàng đã mua mới được đánh giá",
+                            fontSize = 13.sp, color = Color(0xFFE65100), fontWeight = FontWeight.SemiBold)
+                        Text("Mua sản phẩm và đơn được xác nhận để mở khóa tính năng này.",
+                            fontSize = 11.sp, color = Color(0xFFBF360C))
+                    }
+                }
             }
         } else if (alreadyReviewed) {
             Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))

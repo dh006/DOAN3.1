@@ -4,10 +4,12 @@ import androidx.compose.ui.graphics.Color
 import com.example.doan3.CartItem
 import com.example.doan3.Order
 import com.example.doan3.Product
+import com.example.doan3.PromoCode
 import com.example.doan3.Review
 import com.example.doan3.UserAccount
 import com.example.doan3.orderList
 import com.example.doan3.productList
+import com.example.doan3.promoList
 import com.example.doan3.reviewList
 import com.example.doan3.userAccounts
 import com.google.firebase.firestore.ktx.firestore
@@ -28,6 +30,7 @@ object FirebaseManager {
         listenUsers()
         listenOrders()
         listenReviews()
+        listenPromoCodes()
     }
 
     // ---------------- PRODUCTS ----------------
@@ -398,6 +401,101 @@ object FirebaseManager {
             reviewList.clear()
             reviewList.addAll(list)
         }
+    }
+
+    // ---------------- PROMO CODES ----------------
+
+    fun listenPromoCodes() {
+        db.collection("promoCodes").addSnapshotListener { snap, err ->
+            if (err != null) return@addSnapshotListener
+            snap ?: return@addSnapshotListener
+            val list = snap.documents.mapNotNull { doc ->
+                try {
+                    PromoCode(
+                        id              = doc.id,
+                        code            = doc.getString("code") ?: "",
+                        discountPercent = (doc.getLong("discountPercent") ?: 0L).toInt(),
+                        maxDiscount     = doc.getLong("maxDiscount") ?: 0L,
+                        minOrder        = doc.getLong("minOrder") ?: 0L,
+                        usageLimit      = (doc.getLong("usageLimit") ?: 0L).toInt(),
+                        usedCount       = (doc.getLong("usedCount") ?: 0L).toInt(),
+                        active          = doc.getBoolean("active") ?: true,
+                        firestoreId     = doc.id
+                    )
+                } catch (e: Exception) { null }
+            }
+            promoList.clear()
+            promoList.addAll(list)
+        }
+    }
+
+    fun addPromoCode(promo: PromoCode, onDone: () -> Unit = {}) = scope.launch {
+        try {
+            val model = mapOf(
+                "code"            to promo.code.uppercase().trim(),
+                "discountPercent" to promo.discountPercent,
+                "maxDiscount"     to promo.maxDiscount,
+                "minOrder"        to promo.minOrder,
+                "usageLimit"      to promo.usageLimit,
+                "usedCount"       to 0,
+                "active"          to promo.active
+            )
+            db.collection("promoCodes").add(model).await()
+            onDone()
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseManager", "addPromoCode error: ${e.message}")
+        }
+    }
+
+    fun updatePromoCode(promo: PromoCode, onDone: () -> Unit = {}) = scope.launch {
+        val fsId = promo.firestoreId
+        if (fsId.isEmpty()) return@launch
+        try {
+            db.collection("promoCodes").document(fsId).update(
+                mapOf(
+                    "code"            to promo.code.uppercase().trim(),
+                    "discountPercent" to promo.discountPercent,
+                    "maxDiscount"     to promo.maxDiscount,
+                    "minOrder"        to promo.minOrder,
+                    "usageLimit"      to promo.usageLimit,
+                    "active"          to promo.active
+                )
+            ).await()
+            onDone()
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseManager", "updatePromoCode error: ${e.message}")
+        }
+    }
+
+    fun deletePromoCode(firestoreId: String, onDone: () -> Unit = {}) = scope.launch {
+        if (firestoreId.isEmpty()) return@launch
+        try {
+            db.collection("promoCodes").document(firestoreId).delete().await()
+            onDone()
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseManager", "deletePromoCode error: ${e.message}")
+        }
+    }
+
+    fun incrementPromoUsage(firestoreId: String) = scope.launch {
+        if (firestoreId.isEmpty()) return@launch
+        try {
+            val doc = db.collection("promoCodes").document(firestoreId).get().await()
+            val used = (doc.getLong("usedCount") ?: 0L).toInt()
+            db.collection("promoCodes").document(firestoreId).update("usedCount", used + 1).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseManager", "incrementPromoUsage error: ${e.message}")
+        }
+    }
+
+    // Xác thực mã — trả về PromoCode nếu hợp lệ, null nếu không
+    fun validatePromoCode(code: String, orderTotal: Long): PromoCode? {
+        val promo = promoList.find {
+            it.code.equals(code.trim(), ignoreCase = true) && it.active
+        } ?: return null
+        if (promo.minOrder > 0 && orderTotal < promo.minOrder) return null
+        if (promo.usageLimit > 0 && promo.usedCount >= promo.usageLimit) return null
+        return promo
     }
 
     fun updateOrderStatus(order: Order, status: String, onDone: () -> Unit = {}) = scope.launch {        val fsId = order.firestoreId
